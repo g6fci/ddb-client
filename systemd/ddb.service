@@ -1,0 +1,15 @@
+# User unit template: scripts/install-client.sh fills in @CLIENTDIR@ (the client folder holding ddb.pyz,
+# ddb.env and ddb.sqlite3).
+[Unit]
+Description=ddb: DDB client node, sessions and inbox polling (DAPPS)
+
+[Service]
+WorkingDirectory=@CLIENTDIR@
+ExecStart=/usr/bin/env python3 ddb.pyz listen --env-file ddb.env
+Restart=on-failure
+RestartSec=30
+# 1 = auth error, 2 = bad configuration: restarting won't help
+RestartPreventExitStatus=1 2
+
+[Install]
+WantedBy=default.target
