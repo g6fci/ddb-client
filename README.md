@@ -13,6 +13,10 @@ This repo holds what a client node needs, ready built:
 | `docs/client-node.md` | the full setup guide |
 | `VERSION` | the build this is |
 
+## Before you start
+
+You need Python 3.10 or later as `python3` (Debian 12, Ubuntu 22.04, Raspberry Pi OS bookworm or later), `git` and systemd. SQLite needs nothing installed: it's part of Python. [docs/client-node.md](docs/client-node.md#before-you-start) has the checks and what to do if one fails.
+
 ## Install
 
 ```
@@ -21,7 +25,7 @@ cd ~/ddb-client
 scripts/install-client.sh ~/ddb
 ```
 
-Then fill in `~/ddb/ddb.env`, hook `DDB` into the node software and start the service: steps 6 to 9 of [docs/client-node.md](docs/client-node.md).
+Then fill in `~/ddb/ddb.env`, hook `DDB` into the node software and start the service: steps 5 to 8 of [docs/client-node.md](docs/client-node.md).
 
 ## Update
 

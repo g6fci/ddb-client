@@ -9,25 +9,42 @@ A client node runs one service, `ddb listen`. It serves users' sessions from the
 | `ddb.sqlite3` | its state, created on first start |
 | `descriptions/` | optional: extra data set description files (`*.json`); forecasts (`FC`) are built in |
 
+## Before you start
+
+The node needs these. On Debian, Ubuntu or Raspberry Pi OS, this checks them all:
+```
+python3 --version                                     # 3.10 or later
+python3 -c 'import sqlite3; print(sqlite3.sqlite_version)'
+git --version
+systemctl --user status >/dev/null && echo "systemd user services OK"
+```
+
+- **Python 3.10 or later, as `python3`.** Debian 12, Ubuntu 22.04 and Raspberry Pi OS 12 (bookworm) or later have it. Debian 11 and Raspberry Pi OS 11 (bullseye) have 3.9, which is too old: upgrade the OS. If `python3` is missing, run `sudo apt install python3`. The programs bundle their one other dependency (`requests`), so there's nothing to install with `pip`.
+- **SQLite.** There's nothing to install separately: the database is built into Python as its `sqlite3` module, and the database file is created on first start. The check above prints SQLite's version (3.24 or later is needed; any Python 3.10 from a distribution has a newer one). If it fails with `No module named '_sqlite3'`, this Python was built without SQLite. Use the distribution's `python3` instead. The `sqlite3` command-line tool isn't needed, though `sudo apt install sqlite3` gets it if you want to look inside the database.
+- **git**, to clone and update the deployment repo: `sudo apt install git`.
+- **systemd user services**, for the service to run under your own user. Every systemd distribution has them. Running at boot without a login needs `loginctl enable-linger $USER` (in the steps below).
+- **A packet node with DAPPS** (0.58.1 or later, or an older installation) and its REST app interface, on this machine or one it can reach.
+
+No time-zone data and no exact clock are needed: the server sends each forecast's local time. The clock still drives message ages, retries and the nightly check, where a few minutes' drift doesn't matter.
+
 ## Checklist
 
-1. **Python.** Any Python 3.10 or later as `python3`. `ddb.pyz` bundles its one dependency (`requests`). The node needs no time-zone data and no exact clock to show forecast times: the server sends each forecast's local offset and zone label. (The clock still drives message ages, retries and the nightly check, where a few minutes' drift doesn't matter.)
-2. **The node's DAPPS app interface.** Note its URL, for example `http://10.0.3.23:5000/AppApi`.
-3. **Tokens for apps `ddb` and `ddbs`, both minted on this node.** The `ddb` token lets `ddb` read and ack its one inbox, whatever the number of sources. The `ddbs` token lets it send commands to the servers' `ddbs` app: newer DAPPS releases (0.58.1 and later) require one for outbound posts, while an older installation set up before that requirement accepts them without, so the `ddbs` token can stay empty there.
-4. **The forecast servers' DAPPS callsigns, in order of preference.** A server is where `ddbs` and `ddb-hub` run, usually the server node's callsign with SSID -7. One is enough; list more and the node fails over to the next if the one it uses goes quiet.
-5. **The client folder.** Clone the client deployment repo (it holds a ready-built `ddb.pyz`; a project checkout works too after `scripts/build.sh`) and run, from the clone:
+1. **The node's DAPPS app interface.** Note its URL, for example `http://10.0.3.23:5000/AppApi`.
+2. **Tokens for apps `ddb` and `ddbs`, both minted on this node.** The `ddb` token lets `ddb` read and ack its one inbox, whatever the number of sources. The `ddbs` token lets it send commands to the servers' `ddbs` app: newer DAPPS releases (0.58.1 and later) require one for outbound posts, while an older installation set up before that requirement accepts them without, so the `ddbs` token can stay empty there.
+3. **The forecast servers' DAPPS callsigns, in order of preference.** A server is where `ddbs` and `ddb-hub` run, usually the server node's callsign with SSID -7. One is enough; list more and the node fails over to the next if the one it uses goes quiet.
+4. **The client folder.** Clone the client deployment repo (it holds a ready-built `ddb.pyz`; a project checkout works too after `scripts/build.sh`) and run, from the clone:
    ```
    scripts/install-client.sh ~/ddb
    ```
    It copies `ddb.pyz` in, creates `ddb.env` from `ddb.env.example` (mode 600) if there is none, and installs the `ddb` systemd user unit. Without either, put `ddb.pyz` and `ddb.env` in the folder yourself, and install `systemd/ddb.service` to `~/.config/systemd/user/ddb.service` with `@CLIENTDIR@` replaced by the folder's full path.
-6. **Fill in `ddb.env`.** Set at least these:
-   - `API_BASE_URL`: the URL from step 2.
-   - `DDB_TOKEN` and `DDBS_TOKEN`: the tokens from step 3.
-   - `FC_SERVERS`: the callsigns from step 4, comma-separated, most preferred first, e.g. `FC_SERVERS=GB7AAA-7,GB7BBB-7`.
+5. **Fill in `ddb.env`.** Set at least these:
+   - `API_BASE_URL`: the URL from step 1.
+   - `DDB_TOKEN` and `DDBS_TOKEN`: the tokens from step 2.
+   - `FC_SERVERS`: the callsigns from step 3, comma-separated, most preferred first, e.g. `FC_SERVERS=GB7AAA-7,GB7BBB-7`.
    - `NODE_LISTEN=62001`: the TCP port the node software connects to. A bare port binds `127.0.0.1`. Keep it on localhost: the first line of each connection is trusted as the user's callsign. On a machine where other people have accounts, any of them could connect as any user.
 
    Keep the file mode 600. `ddb` warns if it isn't.
-7. **Hook it into the node software.** `ddb hook` adds the `DDB` command to the node's configuration. Run it first without `--write` to see what it would add, then with `--write`; it keeps the old file as `<file>.pre-ddb` and does nothing if the hook is already there. The config file usually belongs to root, so use `sudo`:
+6. **Hook it into the node software.** `ddb hook` adds the `DDB` command to the node's configuration. Run it first without `--write` to see what it would add, then with `--write`; it keeps the old file as `<file>.pre-ddb` and does nothing if the hook is already there. The config file usually belongs to root, so use `sudo`:
    ```
    sudo python3 ddb.pyz hook bpq /etc/bpq32.cfg --port 62001            # LinBPQ / G8BPQ
    sudo python3 ddb.pyz hook xrouter /opt/xrouter/XROUTER.CFG --port 62001 --write   # XRouter
@@ -43,13 +60,13 @@ A client node runs one service, `ddb listen`. It serves users' sessions from the
          APPLTYPE=TCP,62001
      ENDAPPL
      ```
-8. **Start it.**
+7. **Start it.**
    ```
    systemctl --user enable --now ddb
    loginctl enable-linger $USER    # so it starts at boot without a login
    ```
    The log is at `journalctl --user -u ddb -f`. It shows `listening on 127.0.0.1:62001`, then `ddb: polling inbox ddb every 5 s for fc`, then a summary every hour.
-9. **Check it.** From the client folder:
+8. **Check it.** From the client folder:
    ```
    python3 ddb.pyz status --env-file ddb.env
    ```
