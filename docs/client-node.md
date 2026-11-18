@@ -61,22 +61,12 @@ The first server is **`GB7FCI-7`**, and it serves every data set. Put it in `DDB
    - `NODE_LISTEN=62001`: the TCP port the node software connects to. A bare port binds `127.0.0.1`. Keep it on localhost: the first line of each connection is trusted as the user's callsign. On a machine where other people have accounts, any of them could connect as any user.
 
    Keep the file mode 600. `ddb` warns if it isn't.
-6. **Hook it into the node software.** `ddb hook` adds the `DDB` command to the node's configuration. Run it first without `--write` to see what it would add, then with `--write`; it keeps the old file as `<file>.pre-ddb` and does nothing if the hook is already there. The config file usually belongs to root, so use `sudo`:
+6. **Hook it into the node software**, so users can type `DDB` at the node prompt. `ddb hook` adds the lines for you; see "Node software: G8BPQ and XRouter" below for what they do, doing it by hand, and checking it.
    ```
-   sudo python3 ddb.pyz hook bpq /etc/bpq32.cfg --port 62001            # LinBPQ / G8BPQ
-   sudo python3 ddb.pyz hook xrouter /opt/xrouter/XROUTER.CFG --port 62001 --write   # XRouter
+   sudo python3 ddb.pyz hook bpq /etc/bpq32.cfg --port 62001                # LinBPQ / G8BPQ
+   sudo python3 ddb.pyz hook xrouter /opt/xrouter/XROUTER.CFG --port 62001  # XRouter
    ```
-   The port must match `NODE_LISTEN` in `ddb.env`. Then restart the node software so it reads the new file. Neither G8BPQ nor XRouter passes the words after the command, so users type `DDB`, then `FC`.
-
-   What it adds, if you'd rather do it by hand:
-   - G8BPQ, `bpq32.cfg`: add `62001` to the Telnet port's `CMDPORT` list (for example `CMDPORT 63001 62001`). Then add an application line `APPLICATION 4,DDB,C 1 HOST 1`, where `1` is the Telnet port's number and `HOST 1` is the second `CMDPORT` entry (counting from 0). The application number and the slot depend on the node.
-   - XRouter, `XROUTER.CFG`:
-     ```
-     APPL=8
-         APPLNAME=DDB
-         APPLTYPE=TCP,62001
-     ENDAPPL
-     ```
+   That shows what it would add. Run it again with `--write` to add it, then restart the node software.
 7. **Start it.**
    ```
    systemctl --user enable --now ddb
@@ -88,6 +78,73 @@ The first server is **`GB7FCI-7`**, and it serves every data set. Put it in `DDB
    python3 ddb.pyz status --env-file ddb.env
    ```
    A healthy node ends with `OK` and exits 0. If the inbox has had no successful poll for 10 minutes, it ends with `STALE: …` and exits 1, so a monitor can run it. Then connect through the node as a user, type `DDB`, and check the greeting.
+
+## Node software: G8BPQ and XRouter
+
+Users reach `ddb` through one node command, `DDB`, whatever the number of data sets. When a user types it, the node software opens a TCP connection to `ddb listen` on this machine, at the port in `NODE_LISTEN` (62001 here). It sends the user's callsign as the first line, then passes the session through both ways. Neither G8BPQ nor XRouter passes on words typed after the command, so users type `DDB`, then `FC` (or `KP` and so on) at the DDB prompt.
+
+Keep `NODE_LISTEN` on localhost (a bare port binds `127.0.0.1`): `ddb` trusts the first line as the user's callsign.
+
+### `ddb hook`
+
+`ddb hook bpq|xrouter CONFIG [--port 62001] [--write]` finds what's needed in the node's configuration file and adds it:
+- **Without `--write`** it prints the lines it would add and changes nothing.
+- **With `--write`** it saves the old file as `<file>.pre-ddb` (with a timestamp if that already exists), then writes the new one, keeping its owner and mode.
+- **If `DDB` is already there** it does nothing.
+- **It stops (exit 2)** if it can't read the file, BPQ has no Telnet port, or there's no free `APPLICATION` number.
+
+Restart the node software afterwards: it only reads its configuration at startup. To undo, copy the `.pre-ddb` file back and restart.
+
+### G8BPQ (LinBPQ)
+
+BPQ reaches local TCP programs through its Telnet port: a port with `DRIVER=Telnet` lists, in its `CONFIG` block, the local TCP ports it may connect to on `CMDPORT`. An `APPLICATION` line then makes a node command that connects to one of them. In `bpq32.cfg`:
+
+```
+PORT
+  PORTNUM=2
+  ID=Telnet
+  DRIVER=Telnet
+  CONFIG
+  ...                      ; the Telnet port's own settings, unchanged
+  CMDPORT 62001
+ENDPORT
+
+APPLICATION 2,DDB,C 2 HOST 0
+```
+
+- `CMDPORT 62001` lists `ddb`'s port. If the line already lists others (`CMDPORT 63001`), add it at the end (`CMDPORT 63001 62001`). Don't reorder the list: other applications refer to its entries by position.
+- In `APPLICATION 2,DDB,C 2 HOST 0`:
+  - `2` is a free application number (1 to 32).
+  - `DDB` is the command users type.
+  - `C 2` connects through the Telnet port, the `2` being its `PORTNUM`.
+  - `HOST 0` is the `CMDPORT` entry to connect to, counting from 0: `HOST 1` for `CMDPORT 63001 62001`.
+- Restart LinBPQ.
+
+`ddb hook bpq` works all three numbers out from the file.
+
+### XRouter
+
+XRouter connects to local TCP programs itself. Add an `APPL` block to `XROUTER.CFG`, with the next free `APPL` number:
+
+```
+APPL=1
+	APPLNAME=DDB
+	APPLTYPE=TCP,62001
+ENDAPPL
+```
+
+- `APPLNAME` is the command users type.
+- `APPLTYPE=TCP,62001` is `ddb`'s port on this machine.
+
+XRouter allows only a few `APPL` blocks, which is one reason `ddb` keeps every data set behind one command. Restart XRouter.
+
+A user who came in from another node arrives as `CALL@NODE`; `ddb` drops the `@NODE`. A console login sends its login name (e.g. `sysop`), which isn't a callsign, so `ddb` refuses it: test as a real user.
+
+### Checking it
+
+1. **`ddb` is listening.** With the `ddb` service running, `journalctl --user -u ddb` shows `listening on 127.0.0.1:62001`. If it isn't running, users get a failed connect from the node.
+2. **It answers.** Without the node: `nc 127.0.0.1 62001`, then type a callsign (e.g. `G4ABC`) and Enter. You should get the DDB greeting. Type `BYE` to leave.
+3. **Through the node.** Connect to the node as a user, type `DDB`, and check the greeting. Then try `FC`, `HELP` and `BYE`.
 
 ## Several servers
 
