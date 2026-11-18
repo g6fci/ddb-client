@@ -42,7 +42,7 @@ No time-zone data and no exact clock are needed: the server sends each forecast'
 
 ### The server
 
-The first server for every data set is **`GB7FCI-7`**. Put it in `FC_SERVERS`, and in the `<NAME>_SERVERS` setting of each data set you enable (`KP_SERVERS=GB7FCI-7` and so on). When more servers come up, add them after it, comma-separated, and the node fails over between them (see "Several servers" below).
+The first server is **`GB7FCI-7`**, and it serves every data set. Put it in `DDB_SERVERS`, which every enabled data set uses. To take one data set from different servers, set that data set's own `<NAME>_SERVERS` (e.g. `KP_SERVERS=GB7BBB-7`), which wins for it alone. When more servers come up, add them after it, comma-separated, and the node fails over between them (see "Several servers" below).
 
 ## Checklist
 
@@ -57,7 +57,7 @@ The first server for every data set is **`GB7FCI-7`**. Put it in `FC_SERVERS`, a
 5. **Fill in `ddb.env`.** Set at least these:
    - `API_BASE_URL`: the URL from step 1.
    - `DDB_TOKEN` and `DDBS_TOKEN`: the tokens from step 2.
-   - `FC_SERVERS`: the callsigns from step 3, comma-separated, most preferred first, to begin with `FC_SERVERS=GB7FCI-7`, later e.g. `FC_SERVERS=GB7FCI-7,GB7BBB-7`.
+   - `DDB_SERVERS`: the callsigns from step 3, comma-separated, most preferred first, to begin with `DDB_SERVERS=GB7FCI-7`, later e.g. `DDB_SERVERS=GB7FCI-7,GB7BBB-7`.
    - `NODE_LISTEN=62001`: the TCP port the node software connects to. A bare port binds `127.0.0.1`. Keep it on localhost: the first line of each connection is trusted as the user's callsign. On a machine where other people have accounts, any of them could connect as any user.
 
    Keep the file mode 600. `ddb` warns if it isn't.
@@ -91,37 +91,37 @@ The first server for every data set is **`GB7FCI-7`**. Put it in `FC_SERVERS`, a
 
 ## Several servers
 
-With more than one server in `FC_SERVERS` the node uses one at a time, the active one, and takes forecasts only from it.
+With more than one server in `DDB_SERVERS` the node uses one at a time, the active one, and takes forecasts only from it.
 - **While forecasts arrive** nothing extra is sent.
 - **When nothing new has come for 9 hours** (1.5 × the forecasts' 6-hour validity) the node sends the server a short `PING`. Its `PONG` names the server's latest run: newer than the node holds means items went missing, and the node asks again; the same means the server's data source has stalled, and the node stays. Any reply at all shows the server is alive.
 - **After 3 unanswered pings** (3 hours apart) the server is marked down and the node moves to the next one: a `SUB` per wanted locator there, and an `UNSUB` per locator to the old server.
 - **Each night**, with its `LIST`, the node pings the servers above the active one; when one answers with current forecasts, it moves back.
 
-`ddb status` shows the list with the active server marked, each server's last new data, last reply, unanswered pings, `DOWN`, last `PONG` and the last switch. To change servers by hand, edit `FC_SERVERS` and restart: an active server that is no longer listed is replaced by the first one.
+`ddb status` shows the list with the active server marked, each server's last new data, last reply, unanswered pings, `DOWN`, last `PONG` and the last switch. To change servers by hand, edit `DDB_SERVERS` and restart: an active server that is no longer listed is replaced by the first one.
 
 ## One-off forecasts
 
-Inside FC a user can ask for a forecast without subscribing: `GET IO83lt`. If the node received one for that locator within the last 6 hours it is ready at once (`IO83lt ready: SHOW IO83lt`) and nothing goes on air; otherwise one `GET` goes to the server, however many users ask, and the answer usually arrives within seconds. A user who has left is told at their next session (`FC: IO83lt forecast ready: SHOW IO83lt`). `SHOW` lists requested locators for 6 hours. A request with no answer after `FC_GET_TIMEOUT` (1 hour) is dropped with a notice. The operator can do the same with `ddb fc get <user> <locator>`.
+Inside FC a user can ask for a forecast without subscribing: `GET IO83lt`. If the node received one for that locator within the last 6 hours it is ready at once (`IO83lt ready: SHOW IO83lt`) and nothing goes on air; otherwise one `GET` goes to the server, however many users ask, and the answer usually arrives within seconds. A user who has left is told at their next session (`FC: IO83lt forecast ready: SHOW IO83lt`). `SHOW` lists requested locators for 6 hours. A request with no answer after `DDB_GET_TIMEOUT` (1 hour) is dropped with a notice. The operator can do the same with `ddb fc get <user> <locator>`.
 
 ## Kp and space weather
 
-The `KP` data set (built in) is a broadcast: one bulletin for everyone, updated every 3 hours, with the current Kp (and its G level when 5 or more) and NOAA's 3-day forecast: Kp by 3-hour block, and the chance of S1+ radiation storms and R1-R2 and R3+ radio blackouts. To offer it, add `kp` to `DDB_SOURCES` (e.g. `DDB_SOURCES=fc,kp`) and set `KP_SERVERS` to the servers that run the `kp` provider, then restart `ddb`. Users type `DDB`, `KP`, then `SUB` to join and `SHOW` to read it.
+The `KP` data set (built in) is a broadcast: one bulletin for everyone, updated every 3 hours, with the current Kp (and its G level when 5 or more) and NOAA's 3-day forecast: Kp by 3-hour block, and the chance of S1+ radiation storms and R1-R2 and R3+ radio blackouts. To offer it, add `kp` to `DDB_SOURCES` (e.g. `DDB_SOURCES=fc,kp`) and restart `ddb`. It uses the servers in `DDB_SERVERS`; set `KP_SERVERS` only to take it from other servers that run the `kp` provider. Users type `DDB`, `KP`, then `SUB` to join and `SHOW` to read it.
 
 ## Solar data
 
-The `SOLAR` data set (built in) is a broadcast too, one bulletin every 3 hours from NOAA SWPC: the current X-ray level and solar wind (speed, Bt and Bz), estimated HF conditions by day and night for four band groups (a rule of thumb from the solar flux and Kp), the latest flare, and the last three days' 10.7 cm solar flux (SFI), sunspot number and C, M and X flare counts. To offer it, add `solar` to `DDB_SOURCES` and set `SOLAR_SERVERS` to the servers that run the `solar` provider, then restart `ddb`. Users type `DDB`, `SOLAR`, then `SUB` and `SHOW`; `INFO` explains the figures.
+The `SOLAR` data set (built in) is a broadcast too, one bulletin every 3 hours from NOAA SWPC: the current X-ray level and solar wind (speed, Bt and Bz), estimated HF conditions by day and night for four band groups (a rule of thumb from the solar flux and Kp), the latest flare, and the last three days' 10.7 cm solar flux (SFI), sunspot number and C, M and X flare counts. To offer it, add `solar` to `DDB_SOURCES` and restart `ddb`. It uses `DDB_SERVERS`; set `SOLAR_SERVERS` only to take it from other servers that run the `solar` provider. Users type `DDB`, `SOLAR`, then `SUB` and `SHOW`; `INFO` explains the figures.
 
 ## Aurora
 
-The `AURORA` data set (built in) works like forecasts, by locator: every 3 hours, from NOAA's OVATION model, the chance of aurora at the locator, the highest within 1000 km (about as far as radio aurora reaches on 6 m and 2 m), and how near the equator a 10% chance reaches on that longitude. Users can `SUB` a locator or `GET` the latest once. To offer it, add `aurora` to `DDB_SOURCES` and set `AURORA_SERVERS` to the servers that run the `aurora` provider, then restart `ddb`.
+The `AURORA` data set (built in) works like forecasts, by locator: every 3 hours, from NOAA's OVATION model, the chance of aurora at the locator, the highest within 1000 km (about as far as radio aurora reaches on 6 m and 2 m), and how near the equator a 10% chance reaches on that longitude. Users can `SUB` a locator or `GET` the latest once. To offer it, add `aurora` to `DDB_SOURCES` and restart `ddb`. It uses `DDB_SERVERS`; set `AURORA_SERVERS` only to take it from other servers that run the `aurora` provider.
 
 ## Earthquakes
 
-The `QUAKES` data set (built in) works like forecasts, by locator: every 3 hours, from EMSC (the European-Mediterranean Seismological Centre), the earthquakes of the last 24 hours that are M5+ anywhere or might be felt at the locator, nearest first, each with its time, magnitude, distance, direction, depth and estimated shaking at the locator (Modified Mercalli intensity). Users can `SUB` a locator or `GET` it once; `INFO` explains the figures. To offer it, add `quakes` to `DDB_SOURCES` and set `QUAKES_SERVERS` to the servers that run the `quakes` provider, then restart `ddb`.
+The `QUAKES` data set (built in) works like forecasts, by locator: every 3 hours, from EMSC (the European-Mediterranean Seismological Centre), the earthquakes of the last 24 hours that are M5+ anywhere or might be felt at the locator, nearest first, each with its time, magnitude, distance, direction, depth and estimated shaking at the locator (Modified Mercalli intensity). Users can `SUB` a locator or `GET` it once; `INFO` explains the figures. To offer it, add `quakes` to `DDB_SOURCES` and restart `ddb`. It uses `DDB_SERVERS`; set `QUAKES_SERVERS` only to take it from other servers that run the `quakes` provider.
 
 ## Tropospheric ducting
 
-The `TROPO` data set (built in) works like forecasts, by locator and with each GFS run: for each forecast time, whether VHF/UHF conditions look `normal`, `enhanced` (super-refraction) or `ducting`, from the steepest fall of radio refractivity in the lowest 2 km and the layer it's in. Users can `SUB` a locator or `GET` it once; `INFO` explains the figures. To offer it, add `tropo` to `DDB_SOURCES` and set `TROPO_SERVERS` to the servers that run the `tropo` provider, then restart `ddb`.
+The `TROPO` data set (built in) works like forecasts, by locator and with each GFS run: for each forecast time, whether VHF/UHF conditions look `normal`, `enhanced` (super-refraction) or `ducting`, from the steepest fall of radio refractivity in the lowest 2 km and the layer it's in. Users can `SUB` a locator or `GET` it once; `INFO` explains the figures. To offer it, add `tropo` to `DDB_SOURCES` and restart `ddb`. It uses `DDB_SERVERS`; set `TROPO_SERVERS` only to take it from other servers that run the `tropo` provider.
 
 ## Updates over the air
 
@@ -133,7 +133,7 @@ A data set is a description file, not code. Put the file in `descriptions/` besi
 
 1. **Check it.** `python3 ddb.pyz describe check descriptions/tide.json` validates it and says whether this core can run it. Add a sample item to see it as users will. For example, from a project checkout, `python3 dist/ddb.pyz describe check src/ddb/builtin/fc.json "ITEM IO83lt 20261021T0600Z 6,11.0,82.8,996.5,0.34,82.4,20.1,234.5,60,BST"` prints `13:00 BST: 11C, humidity 83%, 997hPa, rain 0.3mm, cloud 82%, wind SW 45mph`. A field-mode description's mistakes are reported with their column in the template.
 2. **See it installed.** `python3 ddb.pyz sources --env-file ddb.env` lists it as `(not enabled)`, or says why it can't be enabled (for example `needs core 3, this is 2`). An installed data set does nothing until it is enabled.
-3. **Enable it.** Add its name to `DDB_SOURCES` (for example `DDB_SOURCES=fc,tide`) and set its servers with `<NAME>_SERVERS` (for example `TIDE_SERVERS`). Its other settings follow the forecast ones with its own prefix (`TIDE_MAX_USER_SUBS` and so on). Then restart `ddb`.
+3. **Enable it.** Add its name to `DDB_SOURCES` (for example `DDB_SOURCES=fc,tide`). It uses the `DDB_*` settings (`DDB_SERVERS`, `DDB_MAX_USER_SUBS` and so on), unless you set its own with its name instead of `DDB` (`TIDE_SERVERS`, `TIDE_MAX_USER_SUBS`). Then restart `ddb`.
 
 A file with the same ID as a built-in description replaces it. A data set that is enabled but can't be used stops `ddb` with exit 2 and the reason.
 
