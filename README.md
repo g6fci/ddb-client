@@ -17,6 +17,8 @@ This repo holds what a client node needs, ready built:
 
 You need Python 3.10 or later as `python3` (Debian 12, Ubuntu 22.04, Raspberry Pi OS bookworm or later), `git` and systemd. SQLite needs nothing installed: it's part of Python. [docs/client-node.md](docs/client-node.md#before-you-start) has the checks and what to do if one fails.
 
+DAPPS on the node needs setting up first: its callsign, two app tokens, and a neighbour for the server, `GB7FCI-7`. See [DAPPS settings](docs/client-node.md#dapps-settings).
+
 ## Install
 
 ```

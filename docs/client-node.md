@@ -27,11 +27,28 @@ systemctl --user status >/dev/null && echo "systemd user services OK"
 
 No time-zone data and no exact clock are needed: the server sends each forecast's local time. The clock still drives message ages, retries and the nightly check, where a few minutes' drift doesn't matter.
 
+## DAPPS settings
+
+`ddb` talks only to the DAPPS on its own node. DAPPS carries the messages between nodes, so it needs these, set on its dashboard (DAPPS's docs: [configure](https://github.com/packet-net/dapps/blob/master/docs/configure.md), [discovery and routing](https://github.com/packet-net/dapps/blob/master/docs/discovery-and-routing.md)):
+
+- **DAPPS running, with its own callsign.** This is DAPPS's callsign with an SSID, not the node's: conventionally the node's callsign with `-7`, e.g. `GB7AAA-7`. The server sends forecasts to this callsign.
+- **The REST app interface reachable from `ddb`.** It's on the dashboard's port, by default `http://<host>:5000`, and `ddb` uses its `/AppApi` path, e.g. `API_BASE_URL=http://127.0.0.1:5000/AppApi`.
+- **Two app tokens**, from the dashboard's **App tokens** page (under System): mint one for app `ddb` and one for app `ddbs`. Each plaintext token is shown once: copy them into `ddb.env` (step 5 below) as `DDB_TOKEN` and `DDBS_TOKEN`. If the node has **Require per-app tokens** turned off, leave both empty.
+- **A neighbour for the server.** DAPPS never adds neighbours by itself. On **Topology > Neighbours**, add the server's DAPPS callsign, **`GB7FCI-7`** to start with:
+  - In radio range of its node, or reached over AXIP: give the radio port you'd use for `C <port> GB7FCI-7` at your node's prompt. Check it by hand first: `C <port> GB7FCI-7` should answer `DAPPSv1>`.
+  - Further away: add it with a **Connect via** node and a **connect script**, as DAPPS's [multi-hop guide](https://github.com/packet-net/dapps/blob/master/docs/multi-hop.md) describes.
+  - Then use **probe now** on the row to check that the link works end to end.
+- **The way back.** The server sends forecasts whenever a new run arrives, not only in reply, so it has to reach your node as well. Send the server's operator your DAPPS callsign and how to connect to it (port, or the route through other nodes) so they can add you as a neighbour too. Until they do, items may wait at the server until your node next calls it.
+
+### The server
+
+The first server for every data set is **`GB7FCI-7`**. Put it in `FC_SERVERS`, and in the `<NAME>_SERVERS` setting of each data set you enable (`KP_SERVERS=GB7FCI-7` and so on). When more servers come up, add them after it, comma-separated, and the node fails over between them (see "Several servers" below).
+
 ## Checklist
 
-1. **The node's DAPPS app interface.** Note its URL, for example `http://10.0.3.23:5000/AppApi`.
-2. **Tokens for apps `ddb` and `ddbs`, both minted on this node.** The `ddb` token lets `ddb` read and ack its one inbox, whatever the number of sources. The `ddbs` token lets it send commands to the servers' `ddbs` app: newer DAPPS releases (0.58.1 and later) require one for outbound posts, while an older installation set up before that requirement accepts them without, so the `ddbs` token can stay empty there.
-3. **The forecast servers' DAPPS callsigns, in order of preference.** A server is where `ddbs` and `ddb-hub` run, usually the server node's callsign with SSID -7. One is enough; list more and the node fails over to the next if the one it uses goes quiet.
+1. **The node's DAPPS app interface.** Note its URL, for example `http://127.0.0.1:5000/AppApi` (see DAPPS settings above).
+2. **Tokens for apps `ddb` and `ddbs`, both minted on this node** (DAPPS settings above). The `ddb` token lets `ddb` read and ack its one inbox, whatever the number of sources. The `ddbs` token lets it send commands to the servers' `ddbs` app: newer DAPPS releases (0.58.1 and later) require one for outbound posts, while an older installation set up before that requirement accepts them without, so the `ddbs` token can stay empty there.
+3. **The servers' DAPPS callsigns, in order of preference.** Start with `GB7FCI-7`. A server is where `ddbs` and `ddb-hub` run, usually the server node's callsign with SSID -7. One is enough; list more and the node fails over to the next if the one it uses goes quiet.
 4. **The client folder.** Clone the client deployment repo (it holds a ready-built `ddb.pyz`; a project checkout works too after `scripts/build.sh`) and run, from the clone:
    ```
    scripts/install-client.sh ~/ddb
@@ -40,7 +57,7 @@ No time-zone data and no exact clock are needed: the server sends each forecast'
 5. **Fill in `ddb.env`.** Set at least these:
    - `API_BASE_URL`: the URL from step 1.
    - `DDB_TOKEN` and `DDBS_TOKEN`: the tokens from step 2.
-   - `FC_SERVERS`: the callsigns from step 3, comma-separated, most preferred first, e.g. `FC_SERVERS=GB7AAA-7,GB7BBB-7`.
+   - `FC_SERVERS`: the callsigns from step 3, comma-separated, most preferred first, to begin with `FC_SERVERS=GB7FCI-7`, later e.g. `FC_SERVERS=GB7FCI-7,GB7BBB-7`.
    - `NODE_LISTEN=62001`: the TCP port the node software connects to. A bare port binds `127.0.0.1`. Keep it on localhost: the first line of each connection is trusted as the user's callsign. On a machine where other people have accounts, any of them could connect as any user.
 
    Keep the file mode 600. `ddb` warns if it isn't.
